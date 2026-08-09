@@ -1,5 +1,13 @@
 # pilotfish
 
+> ⚠️ **BETA channel (`@beta` npm tag).** Published as part of a
+> coordinated beta release across the LoomKit harness family (loomkit,
+> seal-gate, hammerhead-debug, pilotfish) so `npm install
+> @gotako/pilotfish@beta` can pull in a real `@gotako/loomkit@beta`
+> dependency instead of requiring both repos cloned side by side.
+> **Expect crashes, missing pieces, and breaking changes without
+> notice.** Not production-ready.
+
 Drives a model through [LoomKit](https://github.com/rfcclub/loomkit)
 `plan.json` tasks, by role, with a bounded retry loop — and hands off to
 [hammerhead-debug](../hammerhead-debug) instead of guessing once that
