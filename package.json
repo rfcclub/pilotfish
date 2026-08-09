@@ -1,6 +1,6 @@
 {
   "name": "@gotako/pilotfish",
-  "version": "0.2.0-beta.0",
+  "version": "0.2.0-beta.1",
   "description": "Orchestrator that drives loomkit's plan.json tasks through weak/strong models by role — not a harness, a guide swimming alongside one.",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,7 @@
     "vitest": "^4.1.5"
   },
   "dependencies": {
-    "@gotako/loomkit": "1.6.0-beta.0"
+    "@gotako/loomkit": "1.6.0-beta.1"
   },
   "publishConfig": {
     "access": "public"
