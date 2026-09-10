@@ -43,14 +43,13 @@ Pilotfish deliberately does **not**:
 
 ## Install
 
-Requires `~/work/loomkit` (or wherever you cloned it) to exist as a
-sibling directory — `package.json` depends on it via
-`file:../loomkit`.
-
 ```bash
 npm install
 npx tsc        # outputs dist/
 ```
+
+`@gotako/loomkit` is a regular npm dependency (pinned in
+`package.json`) — no sibling clone required.
 
 ## Config: `pilotfish.config.json`
 
