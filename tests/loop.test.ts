@@ -137,6 +137,29 @@ describe('runTask', () => {
     }
   })
 
+  it('rejects a model-returned file path that escapes projectRoot via ../..', async () => {
+    writePlan(basePlan())
+    const modelCaller: ModelCaller = async () => ({ files: { '../../evil.txt': 'pwned' } })
+    const testRunner: TestRunner = async () => ({ passed: true, output: 'pass' })
+
+    await expect(
+      runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner }),
+    ).rejects.toThrow(/outside projectRoot/)
+    expect(existsSync(join(tmpDir, '..', 'evil.txt'))).toBe(false)
+  })
+
+  it('rejects a model-returned absolute file path', async () => {
+    writePlan(basePlan())
+    const outsideAbs = join(tmpdir(), `pilotfish-outside-${Date.now()}.txt`)
+    const modelCaller: ModelCaller = async () => ({ files: { [outsideAbs]: 'pwned' } })
+    const testRunner: TestRunner = async () => ({ passed: true, output: 'pass' })
+
+    await expect(
+      runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner }),
+    ).rejects.toThrow(/outside projectRoot/)
+    expect(existsSync(outsideAbs)).toBe(false)
+  })
+
   it('maxIterationsOverride overrides plan.json escalation setting', async () => {
     writePlan(basePlan())
     let calls = 0

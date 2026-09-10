@@ -1,5 +1,5 @@
 import { writeFileSync, mkdirSync } from 'fs'
-import { dirname, resolve } from 'path'
+import { dirname, resolve, sep } from 'path'
 import { readPlanJson } from '@gotako/loomkit'
 import { resolveModel, buildTestCommand } from './config.js'
 import type { RunTaskOptions, RunTaskResult } from './types.js'
@@ -26,8 +26,12 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
   for (let attempt = 1; attempt <= maxIterations; attempt++) {
     const result = await opts.modelCaller({ role, model, task, attempt, previousError })
 
+    const root = resolve(opts.projectRoot)
     for (const [relPath, content] of Object.entries(result.files)) {
-      const filePath = resolve(opts.projectRoot, relPath)
+      const filePath = resolve(root, relPath)
+      if (filePath !== root && !filePath.startsWith(root + sep)) {
+        throw new Error(`model returned a file path outside projectRoot: "${relPath}" resolves to ${filePath}`)
+      }
       mkdirSync(dirname(filePath), { recursive: true })
       writeFileSync(filePath, content)
     }
