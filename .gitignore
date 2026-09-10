@@ -1,2 +1,6 @@
 node_modules/
 dist/
+
+# Workflow state + generated graph — not part of the published package
+openspec/
+graphify-out/
