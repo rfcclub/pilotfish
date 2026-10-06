@@ -1,7 +1,7 @@
 {
   "name": "@gotako/pilotfish",
-  "version": "0.2.0-beta.3",
-  "description": "Orchestrator that drives loomkit's plan.json tasks through weak/strong models by role — not a harness, a guide swimming alongside one.",
+  "version": "0.2.0-beta.4",
+  "description": "Provider-neutral bounded task runner for Orca plan.json, with manual debugging handoff",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -20,14 +20,19 @@
   "devDependencies": {
     "@types/node": "^25.6.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
-  },
-  "dependencies": {
-    "@gotako/loomkit": "1.6.0"
+    "vitest": "4.1.11"
   },
   "publishConfig": {
     "access": "public"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "peerDependencies": {
+    "@gotako/orca": ">=1.6.2-beta.7 <2"
+  },
+  "peerDependenciesMeta": {
+    "@gotako/orca": {
+      "optional": true
+    }
+  }
 }

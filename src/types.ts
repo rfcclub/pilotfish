@@ -1,4 +1,4 @@
-import type { PlanTask } from '@gotako/loomkit'
+import type { PlanTask } from '@gotako/orca'
 
 export interface PilotfishConfig {
   /** role name -> opaque model identifier, passed through to modelCommand */

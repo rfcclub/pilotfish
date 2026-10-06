@@ -1,6 +1,6 @@
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname, resolve, sep } from 'path'
-import { readPlanJson } from '@gotako/loomkit'
+import { readPlanJson } from '@gotako/orca'
 import { resolveModel, buildTestCommand } from './config.js'
 import type { RunTaskOptions, RunTaskResult } from './types.js'
 import { defaultTestRunner } from './test-runner.js'

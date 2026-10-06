@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     case 'run':
       return await cmdRun(positional, flags)
     default:
-      process.stdout.write(`pilotfish — role-based task orchestrator for loomkit plan.json\n\n` +
+      process.stdout.write(`pilotfish — role-based task orchestrator for Orca plan.json\n\n` +
         `Usage:\n  pilotfish run <changeDir> <task-id> [--project-root <dir>] [--config <path>] [--role <role>]\n`)
       process.exit(command ? 1 : 0)
   }

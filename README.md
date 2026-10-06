@@ -1,27 +1,21 @@
 # pilotfish
 
-> ⚠️ **BETA channel (`@beta` npm tag).** Published as part of a
-> coordinated beta release across the LoomKit harness family (loomkit,
-> seal-gate, hammerhead-debug, pilotfish) so `npm install
-> @gotako/pilotfish@beta` can pull in a real `@gotako/loomkit@beta`
-> dependency instead of requiring both repos cloned side by side.
-> **Expect crashes, missing pieces, and breaking changes without
-> notice.** Not production-ready.
+> **Local candidate.** This migration has no npm registry release. Install the reviewed Orca and Pilotfish packages together as described below.
 
-Drives a model through [LoomKit](https://github.com/rfcclub/loomkit)
+Drives a model through [Orca](https://github.com/GotakoVN/orca)
 `plan.json` tasks, by role, with a bounded retry loop — and hands off to
 [hammerhead-debug](../hammerhead-debug) instead of guessing once that
 loop is exhausted.
 
 *"Not a harness — a guide swimming alongside one."* Pilotfish doesn't
-define gate rules or hypothesis-gating of its own; it consumes LoomKit's
+define gate rules or hypothesis-gating of its own; it consumes Orca's
 plan tasks and (on failure) hands off to hammerhead-debug's discipline
 rather than reinventing either.
 
 ## What it does
 
 ```
-read next pending plan.json task (via @gotako/loomkit)
+read next pending plan.json task (via @gotako/orca)
   → resolve model for the task's role (pilotfish.config.json)
   → call the model, write the files it returns
   → run the task's test
@@ -36,9 +30,9 @@ read next pending plan.json task (via @gotako/loomkit)
 
 Pilotfish deliberately does **not**:
 - hardcode or assume any model provider/API — see Config below,
-- call `loomkit plan-json complete` for you — a passing test proves the
-  task is *ready* to complete; marking it complete (hashing files,
-  updating `plan.json`) stays LoomKit's own, already-tested job,
+- call `orca plan-json complete` for you — a configured test command exiting zero marks the
+  task *ready* to complete; Orca independently validates real execution evidence; marking it complete (hashing files,
+  updating `plan.json`) stays Orca's own, already-tested job,
 - auto-open a hammerhead-debug session — it hands you the command.
 
 ## Install
@@ -48,8 +42,19 @@ npm install
 npx tsc        # outputs dist/
 ```
 
-`@gotako/loomkit` is a regular npm dependency (pinned in
-`package.json`) — no sibling clone required.
+`@gotako/orca` is an explicit peer prerequisite (>=1.6.2-beta.7 <2).
+Orca already uses Pilotfish, so npm auto-install of this peer is disabled to
+avoid a recursive package dependency. Install the reviewed Orca candidate at
+the same package root before building or running Pilotfish; no sibling source
+clone or GitHub account is required:
+
+```bash
+npm install --ignore-scripts /path/to/gotako-orca-1.6.2-beta.7.tgz
+npm install --ignore-scripts /path/to/gotako-pilotfish-candidate.tgz
+```
+
+The optional peer metadata controls npm installation only. Running Pilotfish
+requires Orca. Model identifiers and commands remain supplied by the operator.
 
 ## Config: `pilotfish.config.json`
 
@@ -96,7 +101,7 @@ pilotfish run <changeDir> <task-id> [--project-root <dir>] [--config <path>] [--
 ```
 
 ```bash
-pilotfish run loomkit/changes/my-feature TASK-1
+pilotfish run orca/changes/my-feature TASK-1
 ```
 
 Prints one of:
@@ -131,8 +136,8 @@ itself.
 
 ## Relationship to the rest of the pipeline
 
-See `~/work/loomkit/HARNESS.md` for the full four-package pipeline
-(LoomKit + seal-gate + hammerhead-debug + pilotfish) and install-from-
+See Orca `docs/execution-loop.md` for the full four-package pipeline
+(Orca + seal-gate + hammerhead-debug + pilotfish) and install-from-
 source instructions for all of them together.
 
 ## Test
@@ -148,3 +153,13 @@ default test runner spawning a real `sh -c`.
 ## License
 
 ISC
+
+Standalone `runTask` does not prove RED or certify harness completion. The Orca loop supplies verified RED, bounds the worker, rechecks GREEN, applies Seal and completes the plan. Hammerhead remains a manual evidence-based handoff. Arbitrary shell commands and model commands are trusted operator configuration, not a sandbox.
+
+## Local migration rollback plan
+
+Before replacing a local candidate, preserve the complete installed Pilotfish
+package and launcher. Restore their exact predecessor bytes if the installed
+shared-reader or Orca controller checks fail, then repeat those checks. Keep
+the previous package and receipts until the candidate is accepted. This release
+does not edit the user's source checkout or publish to npm.
