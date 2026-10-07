@@ -143,8 +143,18 @@ source instructions for all of them together.
 ## Test
 
 ```bash
-npx vitest run
+npm ci
+npm run test:local -- /absolute/path/to/gotako-orca-candidate.tgz
 ```
+
+This development command installs the supplied local Orca peer in this checkout
+without saving it to the manifest or lockfile, builds Pilotfish, and runs the
+whole suite, including the actual two-task Orca loop. It never installs globally
+or fetches the unpublished Orca peer by name. Normal npm dependencies may still
+need the registry or an existing npm cache. No GitHub account is required.
+Once bootstrapped, `npm test` reruns the suite using that local peer; missing
+Orca is a setup error, not a skipped acceptance test. CLI/gate overrides remain
+available for testing separately installed packages.
 
 Includes real (non-mocked) subprocess tests: a real fake "model" script
 that reads a real temp prompt file and returns real JSON, and the

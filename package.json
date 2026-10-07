@@ -1,6 +1,6 @@
 {
   "name": "@gotako/pilotfish",
-  "version": "0.2.0-beta.4",
+  "version": "0.2.0-beta.5",
   "description": "Provider-neutral bounded task runner for Orca plan.json, with manual debugging handoff",
   "type": "module",
   "main": "dist/index.js",
@@ -15,6 +15,7 @@
     "build": "tsc",
     "prepublishOnly": "tsc",
     "test": "vitest run",
+    "test:local": "node scripts/test-local.mjs",
     "test:watch": "vitest"
   },
   "devDependencies": {

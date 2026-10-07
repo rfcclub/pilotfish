@@ -4,11 +4,12 @@ import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, symlinkSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 
-const cli = process.env.ORCA_TEST_CLI ?? fileURLToPath(new URL('../../dist/cli/index.js', import.meta.url));
-const gateModule = process.env.ORCA_TEST_GATE_MODULE ?? '/opt/homebrew/lib/node_modules/@gotako/orca/dist/harness/gate-plan.js';
+const require = createRequire(import.meta.url);
+const cli = process.env.ORCA_TEST_CLI ?? require.resolve('@gotako/orca/dist/cli/index.js');
+const gateModule = process.env.ORCA_TEST_GATE_MODULE ?? require.resolve('@gotako/orca/dist/harness/gate-plan.js');
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'orca-loop-cli-')), dir = join(root, 'orca/changes/toy');
   mkdirSync(join(dir, 'specs/toy'), { recursive: true }); mkdirSync(join(root, 'tests'));
@@ -44,7 +45,7 @@ console.log(JSON.stringify({files:{[t.files[0]]:'export const value='+n+';'}}));
   return { root, dir, configPath, run, clean: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-it.skipIf(!process.env.ORCA_TEST_CLI)('loop CLI completes two actual RED/Pilotfish/GREEN tasks and fresh verification without GitHub', async () => {
+it('loop CLI completes two actual RED/Pilotfish/GREEN tasks and fresh verification without GitHub', async () => {
   const f = await fixture();
   try {
     const result = f.run(['loop', 'toy', '--config', f.configPath]);
