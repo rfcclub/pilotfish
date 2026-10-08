@@ -1,11 +1,21 @@
 import { writeFileSync, mkdirSync } from 'fs'
 import { dirname, resolve, sep } from 'path'
-import { readPlanJson } from '@gotako/orca'
+import { createRequire } from 'node:module'
+
 import { resolveModel, buildTestCommand } from './config.js'
 import type { RunTaskOptions, RunTaskResult } from './types.js'
 import { defaultTestRunner } from './test-runner.js'
 
+const require = createRequire(import.meta.url)
+
 export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
+  try {
+    require.resolve('@gotako/orca')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'MODULE_NOT_FOUND') throw error
+    throw new Error('Pilotfish requires Orca. Install the local Orca candidate tarball at the same package root: npm install --ignore-scripts /path/to/gotako-orca-candidate.tgz', { cause: error })
+  }
+  const { readPlanJson } = await import('@gotako/orca')
   const plan = readPlanJson(opts.changeDir)
   const task = plan.tasks.find(t => t.id === opts.taskId)
   if (!task) {

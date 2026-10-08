@@ -3,8 +3,9 @@ import { it, expect } from 'vitest';
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, symlinkSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 
 const require = createRequire(import.meta.url);
@@ -21,7 +22,7 @@ async function fixture() {
   }
   execFileSync('git', ['init', '-q', '-b', 'work/toy'], { cwd: root }); execFileSync('git', ['add', '.'], { cwd: root });
   execFileSync('git', ['-c', 'user.name=f', '-c', 'user.email=f@example.invalid', 'commit', '-qm', 'base'], { cwd: root });
-  symlinkSync(resolve('node_modules'), join(root, 'node_modules'), 'dir');
+  symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(root, 'node_modules'), 'dir');
   writeFileSync(join(dir, 'intent.md'), '# Intent\n\n## Success Criteria\n- SC-1 Complete both required values\n\n## Intent Approval\nStatus: APPROVED\n');
   const plan = { schema_version: '1.0', change_id: 'toy', traces_to: { target: 'INTENT', status: 'RESOLVED' },
     tasks: [['a', 'T1', 2], ['b', 'T2', 3]].map(([a, id, n]) => ({ id, status: 'pending',
@@ -37,7 +38,7 @@ async function fixture() {
 const t=p.call.task,n=t.id==='T1'?2:3;
 console.log(JSON.stringify({files:{[t.files[0]]:'export const value='+n+';'}}));`);
   const configPath = join(root, 'loop.config.json');
-  writeFileSync(configPath, JSON.stringify({ pilotfishModule: process.env.PILOTFISH_TEST_MODULE ?? resolve('dist/index.js'),
+  writeFileSync(configPath, JSON.stringify({ pilotfishModule: process.env.PILOTFISH_TEST_MODULE ?? fileURLToPath(new URL('../dist/index.js', import.meta.url)),
     roles: { apply: 'fixture' }, driver: { command: process.execPath, args: [driver, '{promptFile}', '{maxTokens}'], env: [] } }));
   const gate = await import(gateModule);
   expect((await gate.runGatePlan({ changeDir: dir })).verdict).toBe('PASS');

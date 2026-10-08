@@ -37,9 +37,12 @@ Pilotfish deliberately does **not**:
 
 ## Install
 
+The local test bootstrap supports npm 11 or newer. npm 9 can fail inside its
+optional-peer resolver before installation; upgrade npm before this step.
+
 ```bash
-npm install
-npx tsc        # outputs dist/
+npm ci
+npm run test:local -- /path/to/gotako-orca-candidate.tgz  # installs peer, builds, tests
 ```
 
 `@gotako/orca` is an explicit peer prerequisite (>=1.6.2-beta.7 <2).
