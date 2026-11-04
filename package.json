@@ -2,6 +2,18 @@
   "name": "@gotako/pilotfish",
   "version": "0.2.0-beta.6",
   "description": "Provider-neutral bounded task runner for Orca plan.json, with manual debugging handoff",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rfcclub/pilotfish.git"
+  },
+  "homepage": "https://github.com/rfcclub/pilotfish#readme",
+  "bugs": {
+    "url": "https://github.com/rfcclub/pilotfish/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +39,6 @@
     "access": "public"
   },
   "author": "",
-  "license": "ISC",
   "peerDependencies": {
     "@gotako/orca": ">=1.6.2-beta.7 <2"
   },
