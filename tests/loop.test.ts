@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync } from 'fs'
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, linkSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { PlanJson } from '@gotako/orca'
@@ -213,6 +213,16 @@ describe('runTask symlinks', () => {
     const error = await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass }).then(() => null, (e: Error) => e)
     expect(String(error?.message)).toMatch(/symlink/)
     expect(readFileSync(join(outside, 'victim'), 'utf8')).toBe('original')
+  })
+
+  it('hard-link: replaces a hard-linked file without writing the shared inode', async () => {
+    writePlan(basePlan())
+    linkSync(join(outside, 'victim'), join(projectRoot, 'linked'))
+    const modelCaller: ModelCaller = async () => ({ files: { linked: 'overwritten' } })
+    const result = await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass })
+    expect(readFileSync(join(outside, 'victim'), 'utf8')).toBe('original')
+    expect(readFileSync(join(projectRoot, 'linked'), 'utf8')).toBe('overwritten')
+    expect(result.status).toBe('complete')
   })
 
   it('symlinked-root: writes inside a projectRoot reached through a symlink', async () => {
