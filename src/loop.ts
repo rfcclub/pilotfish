@@ -1,5 +1,5 @@
-import { writeFileSync, mkdirSync } from 'fs'
-import { dirname, resolve, sep } from 'path'
+import { closeSync, constants, lstatSync, mkdirSync, openSync, realpathSync, writeSync } from 'fs'
+import { join, relative, resolve, sep } from 'path'
 import { createRequire } from 'node:module'
 
 import { resolveModel, buildTestCommand } from './config.js'
@@ -7,6 +7,45 @@ import type { RunTaskOptions, RunTaskResult } from './types.js'
 import { defaultTestRunner } from './test-runner.js'
 
 const require = createRequire(import.meta.url)
+
+/**
+ * Writes a model-returned file under root without following any symlink: parent components
+ * are lstat-checked (missing ones created one level at a time) and the file is opened with
+ * O_NOFOLLOW. A directory swapped for a symlink between the check and the open is not covered.
+ */
+function writeInsideRoot(root: string, relPath: string, content: string): void {
+  const base = realpathSync(root)
+  const filePath = resolve(base, relative(resolve(root), resolve(root, relPath)))
+  if (filePath === base || !filePath.startsWith(base + sep)) {
+    throw new Error(`model returned a file path outside projectRoot: "${relPath}" resolves to ${resolve(root, relPath)}`)
+  }
+  const parts = relative(base, filePath).split(sep)
+  let current = base
+  for (const part of parts.slice(0, -1)) {
+    current = join(current, part)
+    let stat
+    try {
+      stat = lstatSync(current)
+    } catch {
+      mkdirSync(current)
+      stat = lstatSync(current)
+    }
+    if (stat.isSymbolicLink()) throw new Error(`refusing to write through symlink "${relative(base, current)}" for "${relPath}"`)
+    if (!stat.isDirectory()) throw new Error(`model file path "${relPath}" crosses a non-directory "${relative(base, current)}"`)
+  }
+  let fd: number
+  try {
+    fd = openSync(filePath, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o644)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ELOOP') throw new Error(`refusing to write through symlink "${relPath}"`, { cause: error })
+    throw error
+  }
+  try {
+    writeSync(fd, content)
+  } finally {
+    closeSync(fd)
+  }
+}
 
 export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
   try {
@@ -36,14 +75,8 @@ export async function runTask(opts: RunTaskOptions): Promise<RunTaskResult> {
   for (let attempt = 1; attempt <= maxIterations; attempt++) {
     const result = await opts.modelCaller({ role, model, task, attempt, previousError })
 
-    const root = resolve(opts.projectRoot)
     for (const [relPath, content] of Object.entries(result.files)) {
-      const filePath = resolve(root, relPath)
-      if (filePath !== root && !filePath.startsWith(root + sep)) {
-        throw new Error(`model returned a file path outside projectRoot: "${relPath}" resolves to ${filePath}`)
-      }
-      mkdirSync(dirname(filePath), { recursive: true })
-      writeFileSync(filePath, content)
+      writeInsideRoot(opts.projectRoot, relPath, content)
     }
 
     const testResult = await testRunner({ testCmd, cwd: opts.projectRoot })
