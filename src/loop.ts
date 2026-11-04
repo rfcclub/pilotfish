@@ -1,4 +1,4 @@
-import { closeSync, constants, lstatSync, mkdirSync, openSync, realpathSync, renameSync, unlinkSync, writeSync } from 'fs'
+import { closeSync, constants, fchmodSync, lstatSync, mkdirSync, openSync, realpathSync, renameSync, unlinkSync, writeSync } from 'fs'
 import { randomBytes } from 'crypto'
 import { join, relative, resolve, sep } from 'path'
 import { createRequire } from 'node:module'
@@ -38,11 +38,13 @@ function writeInsideRoot(root: string, relPath: string, content: string): void {
     if (!stat.isDirectory()) throw new Error(`model file path "${relPath}" crosses a non-directory "${relative(base, current)}"`)
   }
   let mode = 0o644
+  let existed = false
   try {
     const existing = lstatSync(filePath)
     if (existing.isSymbolicLink()) throw new Error(`refusing to write through symlink "${relPath}"`)
     if (!existing.isFile()) throw new Error(`model file path "${relPath}" is not a regular file`)
     mode = existing.mode & 0o777
+    existed = true
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
   }
@@ -50,6 +52,8 @@ function writeInsideRoot(root: string, relPath: string, content: string): void {
   const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, mode)
   try {
     try {
+      // open() applies the umask; a replaced file keeps exactly the mode it had.
+      if (existed) fchmodSync(fd, mode)
       writeSync(fd, content)
     } finally {
       closeSync(fd)

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, linkSync } from 'fs'
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, linkSync, chmodSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { PlanJson } from '@gotako/orca'
@@ -223,6 +223,21 @@ describe('runTask symlinks', () => {
     expect(readFileSync(join(outside, 'victim'), 'utf8')).toBe('original')
     expect(readFileSync(join(projectRoot, 'linked'), 'utf8')).toBe('overwritten')
     expect(result.status).toBe('complete')
+  })
+
+  it('existing-mode: a replaced file keeps its permissions despite the umask', async () => {
+    writePlan(basePlan())
+    const target = join(projectRoot, 'tool.sh')
+    writeFileSync(target, 'old')
+    chmodSync(target, 0o775)
+    const previous = process.umask(0o022)
+    try {
+      const modelCaller: ModelCaller = async () => ({ files: { 'tool.sh': 'new' } })
+      await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass })
+    } finally {
+      process.umask(previous)
+    }
+    expect((statSync(target).mode & 0o777).toString(8)).toBe('775')
   })
 
   it('symlinked-root: writes inside a projectRoot reached through a symlink', async () => {
