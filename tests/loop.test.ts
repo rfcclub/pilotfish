@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'fs'
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync, linkSync, chmodSync, statSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import type { PlanJson } from '@gotako/orca'
@@ -174,5 +174,83 @@ describe('runTask', () => {
     })
     expect(result.status).toBe('escalate')
     expect(calls).toBe(1)
+  })
+})
+
+describe('runTask symlinks', () => {
+  const pass: TestRunner = async () => ({ passed: true, output: 'pass' })
+  let outside: string
+  beforeEach(() => {
+    outside = join(tmpdir(), `pilotfish-outside-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+    mkdirSync(outside, { recursive: true })
+    writeFileSync(join(outside, 'victim'), 'original')
+  })
+  afterEach(() => rmSync(outside, { recursive: true, force: true }))
+
+  it('parent-symlink: refuses a write through a symlinked directory', async () => {
+    writePlan(basePlan())
+    symlinkSync(outside, join(projectRoot, 'link'))
+    const modelCaller: ModelCaller = async () => ({ files: { 'link/victim': 'overwritten' } })
+    const error = await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass }).then(() => null, (e: Error) => e)
+    expect(String(error?.message)).toMatch(/symlink/)
+    expect(readFileSync(join(outside, 'victim'), 'utf8')).toBe('original')
+  })
+
+  it('nested-parent-symlink: refuses a symlink deeper in the path', async () => {
+    writePlan(basePlan())
+    mkdirSync(join(projectRoot, 'a'))
+    symlinkSync(outside, join(projectRoot, 'a', 'link'))
+    const modelCaller: ModelCaller = async () => ({ files: { 'a/link/b/victim': 'overwritten' } })
+    const error = await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass }).then(() => null, (e: Error) => e)
+    expect(String(error?.message)).toMatch(/symlink/)
+    expect(existsSync(join(outside, 'b'))).toBe(false)
+  })
+
+  it('final-symlink: refuses to write through a symlinked file', async () => {
+    writePlan(basePlan())
+    symlinkSync(join(outside, 'victim'), join(projectRoot, 'victim'))
+    const modelCaller: ModelCaller = async () => ({ files: { victim: 'overwritten' } })
+    const error = await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass }).then(() => null, (e: Error) => e)
+    expect(String(error?.message)).toMatch(/symlink/)
+    expect(readFileSync(join(outside, 'victim'), 'utf8')).toBe('original')
+  })
+
+  it('hard-link: replaces a hard-linked file without writing the shared inode', async () => {
+    writePlan(basePlan())
+    linkSync(join(outside, 'victim'), join(projectRoot, 'linked'))
+    const modelCaller: ModelCaller = async () => ({ files: { linked: 'overwritten' } })
+    const result = await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass })
+    expect(readFileSync(join(outside, 'victim'), 'utf8')).toBe('original')
+    expect(readFileSync(join(projectRoot, 'linked'), 'utf8')).toBe('overwritten')
+    expect(result.status).toBe('complete')
+  })
+
+  it('existing-mode: a replaced file keeps its permissions despite the umask', async () => {
+    writePlan(basePlan())
+    const target = join(projectRoot, 'tool.sh')
+    writeFileSync(target, 'old')
+    chmodSync(target, 0o775)
+    const previous = process.umask(0o022)
+    try {
+      const modelCaller: ModelCaller = async () => ({ files: { 'tool.sh': 'new' } })
+      await runTask({ changeDir, projectRoot, taskId: 'TASK-1', config, modelCaller, testRunner: pass })
+    } finally {
+      process.umask(previous)
+    }
+    expect((statSync(target).mode & 0o777).toString(8)).toBe('775')
+  })
+
+  it('symlinked-root: writes inside a projectRoot reached through a symlink', async () => {
+    writePlan(basePlan())
+    const alias = `${outside}-root-alias`
+    symlinkSync(projectRoot, alias)
+    try {
+      const modelCaller: ModelCaller = async () => ({ files: { 'src/new/deep.js': 'ok' } })
+      const result = await runTask({ changeDir, projectRoot: alias, taskId: 'TASK-1', config, modelCaller, testRunner: pass })
+      expect(result.status).toBe('complete')
+      expect(readFileSync(join(projectRoot, 'src', 'new', 'deep.js'), 'utf8')).toBe('ok')
+    } finally {
+      rmSync(alias, { force: true })
+    }
   })
 })
