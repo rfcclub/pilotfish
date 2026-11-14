@@ -1,6 +1,6 @@
 {
   "name": "@gotako/pilotfish",
-  "version": "0.2.0-beta.7",
+  "version": "0.2.0-beta.8",
   "description": "Provider-neutral bounded task runner for Orca plan.json, with manual debugging handoff",
   "license": "MIT",
   "repository": {
@@ -21,7 +21,8 @@
     "pilotfish": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "docs"
   ],
   "scripts": {
     "build": "tsc",
@@ -40,7 +41,7 @@
   },
   "author": "",
   "peerDependencies": {
-    "@gotako/orca": ">=1.6.2-beta.7 <2"
+    "@gotako/orca": "^1.6.2-beta.7 || ^1.7.0-0"
   },
   "peerDependenciesMeta": {
     "@gotako/orca": {

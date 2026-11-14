@@ -1,178 +1,144 @@
-# pilotfish
+# @gotako/pilotfish
 
-> **Local candidate.** This migration has no npm registry release. Install the reviewed Orca and Pilotfish packages together as described below.
+> **Beta.** Expect breaking changes between beta releases. Install it from npm with the `beta` or `latest` tag (both currently point at the beta line). These docs describe the version in the `package.json` that shipped with them.
 
-Drives a model through [Orca](https://github.com/GotakoVN/orca)
-`plan.json` tasks, by role, with a bounded retry loop — and hands off to
-[hammerhead-debug](../hammerhead-debug) instead of guessing once that
-loop is exhausted.
+Pilotfish takes one task from an [Orca](https://www.npmjs.com/package/@gotako/orca) `plan.json`, asks a model to write the code for it, runs the task's test, and feeds the real test failure back to the model for another try. The number of tries is bounded. When the tries run out, it stops and prints a handoff for [hammerhead-debug](https://www.npmjs.com/package/@gotako/hammerhead-debug) instead of guessing.
 
-*"Not a harness — a guide swimming alongside one."* Pilotfish doesn't
-define gate rules or hypothesis-gating of its own; it consumes Orca's
-plan tasks and (on failure) hands off to hammerhead-debug's discipline
-rather than reinventing either.
+Pilotfish is small: under 400 lines of TypeScript and three configuration keys. It does not talk to any model provider itself. You give it a shell command that does that.
 
-## What it does
+## What it is
 
-```
-read next pending plan.json task (via @gotako/orca)
-  → resolve model for the task's role (pilotfish.config.json)
-  → call the model, write the files it returns
-  → run the task's test
-  → passed?  → done, attempts: N
-  → failed?  → feed the real error back, retry (up to plan.json's own
-                escalation.max_improvement_iterations)
-  → exhausted?  → escalate: a real, actionable handoff (symptom + repro
-                   command + last real error) — never a guessed fix.
-                   Prints the exact `hammerhead-debug open ...` command
-                   to run next; does not auto-execute it.
-```
+- A command, `pilotfish run <changeDir> <task-id>`, and a small library with the same loop (`runTask`).
+- A bounded retry loop: model call, write the returned files, run the test command, repeat with the failure output.
+- The piece that `orca loop` calls to apply one model attempt per task. See [Driving it from orca loop](docs/orca-loop.md).
 
-Pilotfish deliberately does **not**:
-- hardcode or assume any model provider/API — see Config below,
-- call `orca plan-json complete` for you — a configured test command exiting zero marks the
-  task *ready* to complete; Orca independently validates real execution evidence; marking it complete (hashing files,
-  updating `plan.json`) stays Orca's own, already-tested job,
-- auto-open a hammerhead-debug session — it hands you the command.
+## What it is not
+
+- Not a model client. There is no built-in provider, API key handling or prompt text. You supply a command ([configuration](docs/configuration.md)).
+- Not a sandbox. The model command and the test command are shell commands that run with your permissions. The model's files are written inside `projectRoot`, but `projectRoot` can contain anything, including the test.
+- Not a gate. Run standalone, it does not prove the test failed first, does not mark the task complete in `plan.json`, and does not run any review. Orca does those ([how the tools fit](docs/family.md)).
+- Not an automatic debugger. After the retries are exhausted it prints the `hammerhead-debug open` command. It does not run it.
 
 ## Install
 
-The local test bootstrap supports npm 11 or newer. npm 9 can fail inside its
-optional-peer resolver before installation; upgrade npm before this step.
+Pilotfish needs Node.js 22 or newer and `@gotako/orca` installed in the same project (Orca provides the `plan.json` reader).
 
 ```bash
-npm ci
-npm run test:local -- /path/to/gotako-orca-candidate.tgz  # installs peer, builds, tests
+npm install @gotako/pilotfish @gotako/orca
 ```
 
-`@gotako/orca` is an explicit peer prerequisite (>=1.6.2-beta.7 <2).
-Orca already uses Pilotfish, so npm auto-install of this peer is disabled to
-avoid a recursive package dependency. Install the reviewed Orca candidate at
-the same package root before building or running Pilotfish; no sibling source
-clone or GitHub account is required:
+Pilotfish declares `@gotako/orca` (`^1.6.2-beta.7 || ^1.7.0-0`) as an optional peer, so installing Pilotfish alone does not install Orca. The range includes the `1.7.0-beta.x` releases; the older range `>=1.6.2-beta.7 <2` in pilotfish `0.2.0-beta.7` and earlier did not match any published Orca and made later `npm install` runs in the same project fail with `ETARGET`.
+
+If Orca is missing, `pilotfish run` fails with the message listed in [troubleshooting](docs/troubleshooting.md#pilotfish-requires-orca).
+
+## Quick start (about 5 minutes, no GitHub, no agents)
+
+This runs the whole loop with a fake "model" script, so you see the retry behaviour without an API key. Start in an empty directory.
 
 ```bash
-npm install --ignore-scripts /path/to/gotako-orca-1.6.2-beta.7.tgz
-npm install --ignore-scripts /path/to/gotako-pilotfish-candidate.tgz
+mkdir pilotfish-demo && cd pilotfish-demo
+npm init -y
+npm install @gotako/pilotfish @gotako/orca
+
+# Create a change folder and a plan.json with one task (Orca commands).
+npx orca init
+npx orca intent demo
+npx orca plan-json init demo --trace INTENT-1 --resolved-by me
+npx orca plan-json add demo --id TASK-1 \
+  --behavior "add returns the sum of two numbers" \
+  --acceptance "add(2,3) returns 5" \
+  --files add.js --test check.js
 ```
 
-The optional peer metadata controls npm installation only. Running Pilotfish
-requires Orca. Model identifiers and commands remain supplied by the operator.
+`npm init -y` creates a CommonJS project, which the `require` calls below rely on. Create three files.
 
-## Config: `pilotfish.config.json`
+`check.js` is the task's test. It exits non-zero when it fails:
+
+```js
+const assert = require('node:assert/strict')
+const { add } = require('./add.js')
+assert.equal(add(2, 3), 5)
+console.log('ok')
+```
+
+`fake-model.js` stands in for a real model. It reads the prompt file and prints `{"files": {...}}`. Its first answer is wrong on purpose:
+
+```js
+const fs = require('node:fs')
+const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
+const body = input.attempt === 1
+  ? 'exports.add = (a, b) => a - b\n'
+  : 'exports.add = (a, b) => a + b\n'
+console.log(JSON.stringify({ files: { [input.task.files[0]]: body } }))
+```
+
+`pilotfish.config.json`:
 
 ```json
 {
-  "roles": {
-    "apply": "your-model-identifier"
-  },
-  "modelCommand": "your-command {model} --prompt-file {promptFile}",
-  "testCommandTemplate": "bun test {test}"
+  "roles": { "apply": "fake-model" },
+  "modelCommand": "node fake-model.js {promptFile}",
+  "testCommandTemplate": "node {test}"
 }
 ```
 
-- **`roles`** — role name → opaque model identifier. Only `apply` is
-  driven today (task execution against an already-split plan). The
-  identifier's meaning is entirely yours; pilotfish never interprets it,
-  only passes it through to `modelCommand`.
-- **`modelCommand`** *(required to call a real model)* — a shell command
-  template. `{model}` and `{promptFile}` are substituted. Pilotfish
-  writes the full call context as JSON to a temp file at `{promptFile}`:
-  ```json
-  {
-    "role": "apply",
-    "model": "your-model-identifier",
-    "task": { "id": "TASK-1", "behavior": "...", "acceptance": "...", "files": [...], "test": "..." },
-    "attempt": 2,
-    "previousError": "AssertionError: expected 5, got NaN\n  at ..."
-  }
-  ```
-  Your command reads that file, does whatever it needs to reach a real
-  model, and must print exactly:
-  ```json
-  {"files": {"relative/path.ts": "full file content", "...": "..."}}
-  ```
-  to stdout. That's the entire contract — how the command reaches a
-  model is completely up to you.
-- **`testCommandTemplate`** — defaults to `"bun test {test}"`. `{test}`
-  is the task's `test` field from `plan.json`.
-
-## CLI
-
-```
-pilotfish run <changeDir> <task-id> [--project-root <dir>] [--config <path>] [--role <role>]
-```
+Run it:
 
 ```bash
-pilotfish run orca/changes/my-feature TASK-1
+npx pilotfish run orca/changes/demo TASK-1
 ```
 
-Prints one of:
+Output (exit code 0):
+
 ```json
-{"status": "already_complete"}
-{"status": "complete", "attempts": 2}
-{"status": "escalate", "attempts": 6, "reason": "...", "escalation": {"symptom": "...", "repro_cmd": "...", "task_id": "TASK-1", "plan_change_id": "my-feature", "last_error": "..."}}
-```
-Exit code 1 on escalation — check the exit code in scripts, not just the
-JSON shape.
-
-## As a library
-
-```ts
-import {
-  runTask,
-  loadConfig, resolveModel, buildTestCommand,
-  createSubprocessModelCaller,
-  defaultTestRunner,
-} from '@gotako/pilotfish'
-import type {
-  RunTaskOptions, RunTaskResult, PilotfishConfig,
-  ModelCaller, ModelCallInput, ModelCallResult,
-  TestRunner, TestRunResult, EscalationHandoff,
-} from '@gotako/pilotfish'
+{
+  "status": "complete",
+  "attempts": 2
+}
 ```
 
-`runTask` accepts injected `modelCaller`/`testRunner` — useful for
-testing, or for wiring pilotfish into something other than a subprocess
-call (an in-process model client, for example) without touching the loop
-itself.
+`add.js` now contains `exports.add = (a, b) => a + b`. Attempt 1 wrote the wrong function, `node check.js` failed, and attempt 2 passed. `plan.json` still says `"status": "pending"`: pilotfish never edits it. To see an escalation, make `fake-model.js` always return `a - b`; the run then exits 1 with the handoff described in [retry and handoff](docs/escalation.md).
 
-## Relationship to the rest of the pipeline
+To use a real model, replace `fake-model.js` with a command that calls your provider. A worked example is in [configuration](docs/configuration.md#example-a-model-command-for-an-openai-style-endpoint).
 
-See Orca `docs/execution-loop.md` for the full four-package pipeline
-(Orca + seal-gate + hammerhead-debug + pilotfish) and install-from-
-source instructions for all of them together.
+## Two workflows
 
-## Test
+| | Local workflow | Git/agent workflow |
+|---|---|---|
+| What you run | `pilotfish run` by hand, one task at a time | `orca loop` (or `orca loop-watch`), which calls pilotfish for every task |
+| Needs | Node, Orca, a `plan.json`, a model command | Everything on the left, plus a git work branch, an approved intent, a passing plan gate, and a loop config |
+| GitHub | Never | Optional, and handled by Orca, not pilotfish |
+| Who completes tasks | You, with Orca commands | The loop, after it re-checks RED and GREEN itself |
 
-```bash
-npm ci
-npm run test:local -- /absolute/path/to/gotako-orca-candidate.tgz
-```
+Pilotfish contains no GitHub code. See [concepts](docs/concepts.md) and [Driving it from orca loop](docs/orca-loop.md).
 
-This development command installs the supplied local Orca peer in this checkout
-without saving it to the manifest or lockfile, builds Pilotfish, and runs the
-whole suite, including the actual two-task Orca loop. It never installs globally
-or fetches the unpublished Orca peer by name. Normal npm dependencies may still
-need the registry or an existing npm cache. No GitHub account is required.
-Once bootstrapped, `npm test` reruns the suite using that local peer; missing
-Orca is a setup error, not a skipped acceptance test. CLI/gate overrides remain
-available for testing separately installed packages.
+## Documentation
 
-Includes real (non-mocked) subprocess tests: a real fake "model" script
-that reads a real temp prompt file and returns real JSON, and the
-default test runner spawning a real `sh -c`.
+| Page | Contents |
+|---|---|
+| [Concepts](docs/concepts.md) | Tasks, roles, the loop, what "complete" means |
+| [Configuration](docs/configuration.md) | Every key of `pilotfish.config.json`, the model command contract, what is sent to the model, which files pilotfish writes |
+| [CLI reference](docs/cli.md) | `pilotfish run`, flags, output, exit codes |
+| [Retry and handoff](docs/escalation.md) | Attempt counting, what the model sees on a retry, the exact handoff text |
+| [Library reference](docs/library.md) | `runTask`, `loadConfig`, types |
+| [Driving it from orca loop](docs/orca-loop.md) | How the loop calls pilotfish, and which of this package's settings it ignores |
+| [Family of tools](docs/family.md) | Orca, seal-gate, hammerhead-debug and where pilotfish sits |
+| [Troubleshooting](docs/troubleshooting.md) | Exact error messages and what to do |
+| [Development](docs/development.md) | Building and testing from a checkout |
+
+## Known limitations
+
+- The standalone run can overwrite any file inside `projectRoot` that the model names, including the task's test, `plan.json` and `.git/`. In testing, a model that returned `{"files": {"check.js": "process.exit(0)"}}` made the run report `complete`. `orca loop` restricts this; plain `pilotfish run` does not.
+- A passing run means your test command exited 0. It is not proof that the test failed before the change, and `plan.json` is not updated.
+- No timeout or token budget is applied to the model command or the test command. The model command's reply is capped at about 1 MiB by Node's default buffer; a larger reply fails with `spawnSync sh ENOBUFS`.
+- The default test command is `bun test {test}`, which needs Bun. Set `testCommandTemplate` for anything else.
+- Commands run through `sh -c`. Not verified on Windows.
+- Only the first `{test}`, `{model}` or `{promptFile}` in a template is substituted.
+- The `hammerhead-debug open ...` line printed on escalation does not escape quotes. See [troubleshooting](docs/troubleshooting.md#the-printed-hammerhead-debug-command-breaks).
+- Only the `apply` role is meaningful. Other role names work as lookup keys but change nothing else.
+
+Bugs and questions: https://github.com/rfcclub/pilotfish/issues
 
 ## License
 
-ISC
-
-Standalone `runTask` does not prove RED or certify harness completion. The Orca loop supplies verified RED, bounds the worker, rechecks GREEN, applies Seal and completes the plan. Hammerhead remains a manual evidence-based handoff. Arbitrary shell commands and model commands are trusted operator configuration, not a sandbox.
-
-## Local migration rollback plan
-
-Before replacing a local candidate, preserve the complete installed Pilotfish
-package and launcher. Restore their exact predecessor bytes if the installed
-shared-reader or Orca controller checks fail, then repeat those checks. Keep
-the previous package and receipts until the candidate is accepted. This release
-does not edit the user's source checkout or publish to npm.
+MIT. See [LICENSE](LICENSE).
