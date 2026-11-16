@@ -4,3 +4,17 @@ dist/
 # Workflow state + generated graph — not part of the published package
 openspec/
 graphify-out/
+
+# Local evidence, receipts, handoffs and per-change run state: they carry machine paths and internal logs, never publish
+.harness/
+**/.harness/
+**/evidence/
+**/.orca-verify.json
+**/.orca-red.json
+**/.archive-meta.json
+**/verification-evidence.json
+AGENT_HANDOFF_*.md
+**/delivery.md
+**/self-check.md
+**/rollout.md
+**/rollback.md
